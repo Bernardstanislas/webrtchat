@@ -22,11 +22,7 @@ webSocket.onopen = () => {
 webSocket.onmessage = rawMessage => {
   const message = JSON.parse(rawMessage.data);
   if (message.source !== CLIENT_ID && message.type === 'HELLO') {
-    const peerConnection = new rtc.RTCPeerConnection(iceServers, {
-      optional: [{
-        DtlsSrtpKeyAgreement: true
-      }]
-    });
+    const peerConnection = createPeerConnection(message.source)
 
     const channel = peerConnection.createDataChannel('communication', {
       reliable: false
@@ -50,19 +46,6 @@ webSocket.onmessage = rawMessage => {
         payload: offer
       }));
     }, console.error.bind(console));
-
-    peerConnection.onicecandidate = ({candidate}) => {
-      if (candidate) {
-        webSocket.send(JSON.stringify({
-          type: 'ICE_CANDIDATE',
-          source: CLIENT_ID,
-          destination: message.source,
-          payload: candidate
-        }));
-      }
-    };
-
-    peerConnectionsStore.addPeerConnection(message.source, peerConnection);
   }
   if (message.destination === CLIENT_ID) {
     console.log(message);
@@ -73,24 +56,7 @@ webSocket.onmessage = rawMessage => {
         break;
       }
       case 'OFFER': {
-        const peerConnection = new rtc.RTCPeerConnection(iceServers, {
-          optional: [{
-            DtlsSrtpKeyAgreement: true
-          }]
-        });
-
-        peerConnectionsStore.addPeerConnection(message.source, peerConnection);
-
-        peerConnection.onicecandidate = ({candidate}) => {
-          if (candidate) {
-            webSocket.send(JSON.stringify({
-              type: 'ICE_CANDIDATE',
-              source: CLIENT_ID,
-              destination: message.source,
-              payload: candidate
-            }));
-          }
-        };
+        const peerConnection = createPeerConnection(message.source);
 
         peerConnection.ondatachannel = ({channel}) => {
           peerChannelsStore.addPeerChannel(message.source, channel);
@@ -119,4 +85,26 @@ webSocket.onmessage = rawMessage => {
       }
     }
   }
+}
+
+const createPeerConnection = destination => {
+  const peerConnection = new rtc.RTCPeerConnection(iceServers, {
+    optional: [{
+      DtlsSrtpKeyAgreement: true
+    }]
+  });
+
+  peerConnectionsStore.addPeerConnection(destination, peerConnection);
+
+  peerConnection.onicecandidate = ({candidate}) => {
+    if (candidate) {
+      webSocket.send(JSON.stringify({
+        type: 'ICE_CANDIDATE',
+        source: CLIENT_ID,
+        destination,
+        payload: candidate
+      }));
+    }
+  };
+  return peerConnection;
 }
