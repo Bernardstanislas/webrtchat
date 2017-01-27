@@ -13,6 +13,10 @@ const webSocket = new WebSocket(webSockerURI);
 const CLIENT_ID = uuid.v4();
 document.title = CLIENT_ID;
 
+window.onbeforeunload = () => {
+  store.channels.map(channel => channel.close());
+};
+
 webSocket.onopen = () => {
   webSocket.send(JSON.stringify({
     type: 'HELLO',
@@ -21,6 +25,12 @@ webSocket.onopen = () => {
 };
 
 const getPeerConnectionByOwner = owner => find(store.peerConnections, {owner}).peerConnection;
+const channelCloseHanlder = (peerConnection, owner) => {
+  peerConnection.close();
+  store.peerConnections = store.peerConnections.filter(item => {
+    return item.owner !== owner;
+  });
+}
 
 webSocket.onmessage = rawMessage => {
   const message = JSON.parse(rawMessage.data);
@@ -31,12 +41,9 @@ webSocket.onmessage = rawMessage => {
       reliable: false
     });
 
-    channel.onclose = () => {
-      peerConnection.close();
-      store.peerConnections = store.peerConnections.filter(({owner}) => {
-        return owner === message.source; 
-      });
-    }
+    store.channels.push(channel);
+
+    channel.onclose = channelCloseHanlder(peerConnection, message.source);
 
     peerConnection.createOffer(offer => {
       peerConnection.setLocalDescription(offer);
@@ -59,12 +66,8 @@ webSocket.onmessage = rawMessage => {
         const peerConnection = createPeerConnection(message.source);
 
         peerConnection.ondatachannel = ({channel}) => {
-          channel.onclose = () => {
-            peerConnection.close();
-            store.peerConnections = store.peerConnections.filter(({owner}) => {
-              return owner === message.source; 
-            });
-          }
+          store.channels.push(channel);
+          channel.onclose = channelCloseHanlder(peerConnection, message.source);
         };
 
         peerConnection.setRemoteDescription(new rtc.RTCSessionDescription(message.payload));
