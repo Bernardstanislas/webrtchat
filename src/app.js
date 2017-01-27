@@ -1,6 +1,7 @@
 import uuid from 'uuid';
 import * as rtc from './rtc-api';
-import {peerConnectionsStore, peerChannelsStore} from './store';
+import store from './store';
+import {find} from 'lodash';
 
 const SERVER_PORT = 3000;
 const iceServers = {iceServers: [{urls: 'stun:stunserver.org'}]};
@@ -19,6 +20,8 @@ webSocket.onopen = () => {
   }));
 };
 
+const getPeerConnectionByOwner = owner => find(store.peerConnections, {owner}).peerConnection;
+
 webSocket.onmessage = rawMessage => {
   const message = JSON.parse(rawMessage.data);
   if (message.source !== CLIENT_ID && message.type === 'HELLO') {
@@ -28,14 +31,12 @@ webSocket.onmessage = rawMessage => {
       reliable: false
     });
 
-    channel.onmessage = ({data}) => {
-      console.log('Received data from channel', message.source, data);
-    };
-
-    channel.onopen = () => {
-      peerChannelsStore.addPeerChannel(message.source, channel);
-      console.log(`Created communication channel with ${message.source}`);
-    };
+    channel.onclose = () => {
+      peerConnection.close();
+      store.peerConnections = store.peerConnections.filter(({owner}) => {
+        return owner === message.source; 
+      });
+    }
 
     peerConnection.createOffer(offer => {
       peerConnection.setLocalDescription(offer);
@@ -48,10 +49,9 @@ webSocket.onmessage = rawMessage => {
     }, console.error.bind(console));
   }
   if (message.destination === CLIENT_ID) {
-    console.log(message);
     switch(message.type) {
       case 'ICE_CANDIDATE': {
-        const peerConnection = peerConnectionsStore.peerConnections[message.source];
+        const peerConnection = getPeerConnectionByOwner(message.source);
         peerConnection.addIceCandidate(new rtc.RTCIceCandidate(message.payload));
         break;
       }
@@ -59,11 +59,12 @@ webSocket.onmessage = rawMessage => {
         const peerConnection = createPeerConnection(message.source);
 
         peerConnection.ondatachannel = ({channel}) => {
-          peerChannelsStore.addPeerChannel(message.source, channel);
-          channel.onmessage = ({data}) => {
-            console.log('Received data from channel', message.source, data);
-          };
-          console.log(`Received communication channel from ${message.source}`);
+          channel.onclose = () => {
+            peerConnection.close();
+            store.peerConnections = store.peerConnections.filter(({owner}) => {
+              return owner === message.source; 
+            });
+          }
         };
 
         peerConnection.setRemoteDescription(new rtc.RTCSessionDescription(message.payload));
@@ -79,7 +80,7 @@ webSocket.onmessage = rawMessage => {
         break;
       }
       case 'ANSWER': {
-        const peerConnection = peerConnectionsStore.peerConnections[message.source];
+        const peerConnection = getPeerConnectionByOwner(message.source);
         peerConnection.setRemoteDescription(new rtc.RTCSessionDescription(message.payload));
         break;
       }
@@ -94,7 +95,10 @@ const createPeerConnection = destination => {
     }]
   });
 
-  peerConnectionsStore.addPeerConnection(destination, peerConnection);
+  store.peerConnections.push({
+    owner: destination, 
+    peerConnection
+  });
 
   peerConnection.onicecandidate = ({candidate}) => {
     if (candidate) {
