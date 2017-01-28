@@ -2,6 +2,7 @@ import uuid from 'uuid';
 import * as rtc from './rtc-api';
 import store from './store';
 import {find} from 'lodash';
+import './view';
 
 const SERVER_PORT = 3000;
 const iceServers = {iceServers: [{urls: 'stun:stunserver.org'}]};
@@ -17,20 +18,25 @@ window.onbeforeunload = () => {
   store.channels.map(channel => channel.close());
 };
 
-webSocket.onopen = () => {
-  webSocket.send(JSON.stringify({
-    type: 'HELLO',
-    source: CLIENT_ID
-  }));
-};
+let localVideoStream;
 
-const getPeerConnectionByOwner = owner => find(store.peerConnections, {owner}).peerConnection;
-const channelCloseHanlder = (peerConnection, owner) => {
-  peerConnection.close();
-  store.peerConnections = store.peerConnections.filter(item => {
-    return item.owner !== owner;
+webSocket.onopen = () => {
+  navigator.mediaDevices.getUserMedia({video: true})
+  .then(stream => {
+    localVideoStream = stream;
+    store.streams.push({
+      owner: CLIENT_ID,
+      stream
+    });
+    webSocket.send(JSON.stringify({
+      type: 'HELLO',
+      source: CLIENT_ID
+    }));
+  })
+  .catch(err => {
+    console.log(err);
   });
-}
+};
 
 webSocket.onmessage = rawMessage => {
   const message = JSON.parse(rawMessage.data);
@@ -44,6 +50,7 @@ webSocket.onmessage = rawMessage => {
     store.channels.push(channel);
 
     channel.onclose = channelCloseHanlder(peerConnection, message.source);
+
 
     peerConnection.createOffer(offer => {
       peerConnection.setLocalDescription(offer);
@@ -113,5 +120,33 @@ const createPeerConnection = destination => {
       }));
     }
   };
+
+  peerConnection.addStream(localVideoStream);
+
+  peerConnection.onaddstream = ({stream}) => {
+    store.streams.push({
+      owner: destination,
+      stream
+    });
+  };
+
   return peerConnection;
+}
+
+const getPeerConnectionByOwner = owner => {
+  return find(store.peerConnections, {owner}).peerConnection;
+}
+
+const channelCloseHanlder = (peerConnection, owner) => () => {
+  peerConnection.close();
+  find(store.streams, {owner}).stream.getVideoTracks()[0].stop();
+  store.peerConnections = store.peerConnections.filter(item => {
+    return item.owner !== owner;
+  });
+  store.channels = store.channels.filter(item => {
+    return item.owner !== owner;
+  });
+  store.streams = store.streams.filter(item => {
+    return item.owner !== owner;
+  });
 }
