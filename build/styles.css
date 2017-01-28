@@ -1,0 +1,15 @@
+.video-list {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+}
+
+.video {
+  height: 150px;
+}
+
+.video video {
+  height: 100%;
+}
+
+/*# sourceMappingURL=styles.css.map*/

@@ -7,7 +7,7 @@ import './view';
 const SERVER_PORT = 3000;
 const iceServers = {iceServers: [{urls: 'stun:stunserver.org'}]};
 
-const webSockerURI = `ws://localhost:${SERVER_PORT}/`;
+const webSockerURI = `ws://broadcast-server.herokuapp.com`;
 
 const webSocket = new WebSocket(webSockerURI);
 
