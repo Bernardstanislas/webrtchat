@@ -1,0 +1,10 @@
+.video-list {
+  display: flex;
+}
+
+.video {
+  height: 150px;
+  video {
+    height: 100%;
+  }
+}
