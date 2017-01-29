@@ -76,7 +76,7 @@
 	var SERVER_PORT = 3000;
 	var iceServers = { iceServers: [{ urls: 'stun:stunserver.org' }] };
 	
-	var webSockerURI = 'ws://broadcast-server.herokuapp.com';
+	var webSockerURI = 'wss://broadcast-server.herokuapp.com';
 	
 	var webSocket = new WebSocket(webSockerURI);
 	
